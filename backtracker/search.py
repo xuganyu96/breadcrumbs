@@ -1,9 +1,92 @@
-import typing as ty
 from collections import namedtuple
+import multiprocessing as mp
+import typing as ty
 from backtracker.backtrackable import Backtrackable
 
 
 Node = namedtuple("Node", ['depth', 'state'])
+
+
+def parallelized_search(states,
+    max_worker_count: int = 1) -> ty.Set[Backtrackable]:
+    """Use multiprocessing to parallelize the search"""
+    def worker(backlog: mp.Queue, results: mp.Queue, 
+               wsize: mp.Value, wlock: mp.Lock,
+               qsize: mp.Value, qlock: mp.Lock):
+        """Takes two queues. Receive the state to search from backlog, then 
+        put next state into results. Once all "next" states have been put into
+        results, acquire the lock on the number of active workers and decrement 
+        it before exiting
+        """
+        qlock.acquire()
+        try:
+            current: Node = backlog.get()
+            qsize.value -= 1
+        finally:
+            qlock.release()
+        
+        for next in current.state.next():
+            results.put(Node(current.depth+1, next))
+        
+        wlock.acquire()
+        try:
+            wsize.value -= 1
+        finally:
+            wlock.release()
+
+    if isinstance(states, Backtrackable):
+        states = [states]
+    # Initialize the two queues
+    backlog = mp.Queue()
+    results = mp.Queue()
+    wsize = mp.Value('i', 0) # the number of active workers
+    wlock = mp.Lock() # the lock for the number of active workers
+    qsize = mp.Value('i', 0) # the number of backlog jobs
+    qlock = mp.Lock() # the lock for updating the backlog job number
+    footprints: ty.Dict[Backtrackable, bool] = dict()
+    solutions: ty.Set[Backtrackable] = set()
+    
+    # Stuff the backlog with the initial states
+    for s in states:
+        qlock.acquire()
+        try:
+            backlog.put(Node(0, s))
+            qsize.value += 1
+            footprints[s] = True
+        finally:
+            qlock.release()
+    
+    while qsize.value > 0 or wsize.value > 0:
+        # If backlog is not empty, start assigning workers until the number of 
+        # workers reach max capacity
+        if not backlog.empty():
+            wlock.acquire()
+            try:
+                mp.Process(target=worker, 
+                    args=(backlog, results, wsize, wlock, qsize, qlock)).start()
+                wsize.value += 1
+            finally:
+                wlock.release()
+        
+        # Harvest the result
+        while not results.empty():
+            result: Node = results.get()
+            if result.state.is_solution() and result.state not in solutions:
+                solutions.add(result.state)
+            elif not footprints.get(result, False):
+                qlock.acquire()
+                try:
+                    backlog.put(result)
+                    qsize.value += 1
+                    footprints[result] = True
+                finally:
+                    qlock.release()
+        
+        print(f"Backlog size: {qsize.value}, worker count: {wsize.value}")
+
+    return solutions
+
+
 
 
 def iterative_search(
