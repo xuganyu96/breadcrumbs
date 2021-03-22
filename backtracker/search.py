@@ -69,7 +69,8 @@ def parallelized_search(states,
             try:
                 wid = str(uuid.uuid4())[:5]
                 mp.Process(target=worker, 
-                    args=(wid, backlog, results, wsize, wlock, qsize, qlock)).start()
+                    args=(wid, backlog, results, wsize, wlock, qsize, 
+                          qlock)).start()
                 wsize.value += 1
             finally:
                 wlock.release()
@@ -79,20 +80,17 @@ def parallelized_search(states,
             result: Node = results.get()
             if footprints.get(result.state, False):
                 continue
-            if result.state.is_solution():
+            elif result.state.is_solution():
                 solutions.add(result.state)
-            elif not footprints.get(result.state, False):
+            else:
                 qlock.acquire()
                 try:
-                    # print(f"Add {result.state} to backlog")
                     backlog.put(result)
                     qsize.value += 1
                     footprints[result.state] = True
                 finally:
                     qlock.release()
-        
-        if not (qsize.value == 0 and wsize.value > 0):
-            print(f"Backlog size: {qsize.value}, footprint size: {len(footprints)}")
+        print(f"Backlog size: {qsize.value}, footprint size: {len(footprints)}")
 
     return solutions
 
