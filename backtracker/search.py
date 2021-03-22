@@ -138,7 +138,7 @@ def iterative_search(
             # searched
             too_deep = current.depth >= max_depth
         
-        if not footprints.get(current.state, False) and not too_deep:
+        if not too_deep:
             # If the current node is already in the footprints, then do not 
             # search; otherwise, add it to the footprints, and obtain all of its
             # immediate neighbors, some being solutions, and others being 
