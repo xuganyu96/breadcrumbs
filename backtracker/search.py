@@ -86,9 +86,6 @@ def parallelized_search(states,
 
     return solutions
 
-
-
-
 def iterative_search(
     states: ty.Union[Backtrackable, ty.Iterable[Backtrackable]],
     dfs: bool = True, max_depth: int = None, n_sols: int = None
